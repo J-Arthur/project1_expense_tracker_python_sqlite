@@ -9,15 +9,17 @@ def on_ready():
     if not os.path.exists('users.db'):
         conn = sqlite3.connect('users.db')
         cur = conn.cursor()
-        cur.execute('''CREATE TABLE IF NOT EXISTS users (ID, name TEXT, year_income REAL, hourly_rate REAL, estimated_weekly_hours REAL)''')
-        cur.execute('''CREATE TABLE IF NOT EXISTS m_transactions (ID, date TEXT, description TEXT, amount REAL, category TEXT, 
+        cur.execute('''CREATE TABLE IF NOT EXISTS users (USER_ID PRIMARY KEY AUTOINCREMENT, name TEXT, year_income REAL, hourly_rate REAL, estimated_weekly_hours REAL)''')
+        cur.execute('''CREATE TABLE IF NOT EXISTS m_transactions (TRANS_ID PRIMARY KEY AUTOINCREMENT, date TEXT, description TEXT, amount REAL, category TEXT, 
             sub_category TEXT, niche TEXT, sector TEXT, user_description TEXT, is_credit INTEGER, is_essential INTEGER)''')
-        cur.execute('''CREATE TABLE IF NOT EXISTS sectors (ID, title TEXT, user_description TEXT, is_credit INTEGER, u_limit REAL)''')
-        cur.execute('''CREATE TABLE IF NOT EXISTS categories (ID, title TEXT, user_description TEXT, is_credit INTEGER, is_essential INTEGER, u_limit REAL)''')
-        cur.execute('''CREATE TABLE IF NOT EXISTS sub_categories (ID, title TEXT, user_description TEXT, is_credit INTEGER, is_essential INTEGER, u_limit REAL)''')
-        cur.execute('''CREATE TABLE IF NOT EXISTS niche (ID, title TEXT, user_description TEXT, is_credit INTEGER, is_essential INTEGER, u_limit REAL)''')
-        cur.execute('''CREATE TABLE IF NOT EXISTS budget_running_summary (ID, year INTEGER, month INTEGER, number_transactions INTEGER, total_in REAL, total_out REAL, total_unique_descriptions INTEGER)''')
-        cur.execute('''CREATE TABLE IF NOT EXISTS budget_history_summary (ID, year INTEGER, month INTEGER, number_transactions INTEGER, total_in REAL, total_out REAL, total_unique_descriptions INTEGER)''')
+        cur.execute('''CREATE TABLE IF NOT EXISTS sectors (SEC_ID PRIMARY KEY AUTOINCREMENT, title TEXT, user_description TEXT, is_credit INTEGER, u_limit REAL)''')
+        cur.execute('''CREATE TABLE IF NOT EXISTS categories (CAT_ID PRIMARY KEY AUTOINCREMENT, title TEXT, user_description TEXT, is_credit INTEGER, is_essential INTEGER, u_limit REAL)''')
+        cur.execute('''CREATE TABLE IF NOT EXISTS sub_categories (SUB_ID PRIMARY KEY AUTOINCREMENT, title TEXT, user_description TEXT, is_credit INTEGER, is_essential INTEGER, u_limit REAL)''')
+        cur.execute('''CREATE TABLE IF NOT EXISTS niche (NICHE_ID PRIMARY KEY AUTOINCREMENT, title TEXT, user_description TEXT, is_credit INTEGER, is_essential INTEGER, u_limit REAL)''')
+        cur.execute('''CREATE TABLE IF NOT EXISTS budget_running_summary (USER_ID, year INTEGER, month INTEGER, number_transactions INTEGER, total_in REAL, total_out REAL, total_unique_descriptions INTEGER)''')
+        cur.execute('''CREATE TABLE IF NOT EXISTS budget_history_summary (BUDGET_ID, USER_ID, year INTEGER, month INTEGER, number_transactions INTEGER, total_in REAL, total_out REAL, total_unique_descriptions INTEGER)''')
+        cur.execute('''CREATE TABLE IF NOT EXISTS cards (CARD_ID, USER_ID , cnum TEXT)''')
+        
         #cur.execute('''CREATE TABLE IF NOT EXISTS budget (ID, year INTEGER, month INTEGER, number_transactions INTEGER, total_in REAL, total_out REAL, total_unique_descriptions INTEGER)''')
         conn.commit()
         conn.close()
@@ -78,7 +80,21 @@ def process_transactions():
     unique_pairs = cur.fetchall()
     unique_pairs = pd.DataFrame(unique_pairs, columns=['description', 'category', 'sub_category', 'niche', 'sector']) 
     print("pairs retreived")
-            
+    cur.execute('''SELECT cnum FROM cards WHERE u_id = "Current User"''')
+    cnum = cur.fetchall()
+    new_transactions = pd.read_csv(input("Please enter current file name: ") + '.csv')
+    pre_process_transactions(unique_pairs, new_transactions, cnum)
+
+def pre_process_transactions(unique_pairs, new_transactions, cnum):
+    new_transactions['processed_description'] = new_transactions['description'].str.lower()
+    new_transactions['processed_description'] = new_transactions['processed_description'].str.replace('[^a-zA-Z]', '')
+    new_transactions['processed_description'] = new_transactions['processed_description'].str.ljust(unique_pairs['description'].str.len().max(), fillchar=' ')
+    patterns = cnum
+    new_transactions['cardnum'] = None
+    for pattern in patterns:
+        matches = new_transactions['description'].str.extract(pattern)
+        new_transactions['card'] = new_transactions['card'].combine_first(matches[0])
+        print("Card numbers extracted")       
 def main_menu():
     print("Main Menu")
     print("1. Process Transactions")

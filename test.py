@@ -9,16 +9,17 @@ def on_ready():
     if not os.path.exists('users.db'):
         conn = sqlite3.connect('users.db')
         cur = conn.cursor()
-        cur.execute('''CREATE TABLE IF NOT EXISTS users (USER_ID PRIMARY KEY AUTOINCREMENT, name TEXT, year_income REAL, hourly_rate REAL, estimated_weekly_hours REAL)''')
-        cur.execute('''CREATE TABLE IF NOT EXISTS m_transactions (TRANS_ID PRIMARY KEY AUTOINCREMENT, date TEXT, description TEXT, amount REAL, category TEXT, 
-            sub_category TEXT, niche TEXT, sector TEXT, user_description TEXT, is_credit INTEGER, is_essential INTEGER)''')
-        cur.execute('''CREATE TABLE IF NOT EXISTS sectors (SEC_ID PRIMARY KEY AUTOINCREMENT, title TEXT, user_description TEXT, is_credit INTEGER, u_limit REAL)''')
-        cur.execute('''CREATE TABLE IF NOT EXISTS categories (CAT_ID PRIMARY KEY AUTOINCREMENT, title TEXT, user_description TEXT, is_credit INTEGER, is_essential INTEGER, u_limit REAL)''')
-        cur.execute('''CREATE TABLE IF NOT EXISTS sub_categories (SUB_ID PRIMARY KEY AUTOINCREMENT, title TEXT, user_description TEXT, is_credit INTEGER, is_essential INTEGER, u_limit REAL)''')
-        cur.execute('''CREATE TABLE IF NOT EXISTS niche (NICHE_ID PRIMARY KEY AUTOINCREMENT, title TEXT, user_description TEXT, is_credit INTEGER, is_essential INTEGER, u_limit REAL)''')
-        cur.execute('''CREATE TABLE IF NOT EXISTS budget_running_summary (USER_ID, year INTEGER, month INTEGER, number_transactions INTEGER, total_in REAL, total_out REAL, total_unique_descriptions INTEGER)''')
-        cur.execute('''CREATE TABLE IF NOT EXISTS budget_history_summary (BUDGET_ID, USER_ID, year INTEGER, month INTEGER, number_transactions INTEGER, total_in REAL, total_out REAL, total_unique_descriptions INTEGER)''')
-        cur.execute('''CREATE TABLE IF NOT EXISTS cards (CARD_ID, USER_ID , cnum TEXT)''')
+        cur.execute('''CREATE TABLE IF NOT EXISTS users (id INT PRIMARY KEY, name TEXT NOT NULL, dob DATE, yearly_income REAL, hourly_rate REAL, weekly_hours INT, net_balance REAL, gross_balance REAL, date_created DATE )''')
+        cur.execute('''CREATE TABLE IF NOT EXISTS m_transactions (id INT PRIMARY KEY, date_uploaded DATE, date_transaction DATE, description TEXT, amount REAL, processed_description TEXT, card_num INT, user_id INT, sector INT, category INT, subcategory INT, niche INT, FOREIGN KEY (user_id) REFERENCES users(id) FOREIGN KEY (card_num) REFERENCES cards(id) FOREIGN KEY (sector) REFERENCES sectors(id) FOREIGN KEY (category) REFERENCES categories(id) FOREIGN KEY (subcategory) REFERENCES subcategories(id) FOREIGN KEY (niche) REFERENCES niches(id))''')
+        cur.execute('''CREATE TABLE IF NOT EXISTS cards (id INT PRIMARY KEY, card_num INT, user_id INT, FOREIGN KEY (user_id) REFERENCES users(id))''')
+        cur.execute('''CREATE TABLE IF NOT EXISTS budget_limits (id INT PRIMARY KEY, user_id INT, sector INT, category INT, subcategory INT, niche INT, limit REAL, FOREIGN KEY (user_id) REFERENCES users(id) FOREIGN KEY (sector) REFERENCES sectors(id) FOREIGN KEY (category) REFERENCES categories(id) FOREIGN KEY (subcategory) REFERENCES subcategories(id) FOREIGN KEY (niche) REFERENCES niches(id))''')
+        cur.execute('''CREATE TABLE IF NOT EXISTS budget_history (id INT PRIMARY KEY, user_id INT, date DATE, number_transactions INTEGER, total_in REAL, total_out REAL, total_unique_descriptions INTEGER, FOREIGN KEY (user_id) REFERENCES users(id))''')
+        cur.execute('''CREATE TABLE IF NOT EXISTS budget_running_summary (id INT PRIMARY KEY, user_id INT, date DATE, number_transactions INTEGER, total_in REAL, total_out REAL, total_unique_descriptions INTEGER, FOREIGN KEY (user_id) REFERENCES users(id))''')
+        cur.execute('''CREATE TABLE IF NOT EXISTS sectors (id INT PRIMARY KEY, name TEXT, user_description TEXT, is_credit BOOLEAN, date_created DATE, created_by INT, FOREIGN KEY (created_by) REFERENCES users(id))''')
+        cur.execute('''CREATE TABLE IF NOT EXISTS categories (id INT PRIMARY KEY, name TEXT, user_description TEXT, sector INT, is_credit BOOLEAN, date_created DATE, created_by INT, FOREIGN KEY (sector) REFERENCES sectors(id) FOREIGN KEY (created_by) REFERENCES users(id))''')
+        cur.execute('''CREATE TABLE IF NOT EXISTS subcategories (id INT PRIMARY KEY, name TEXT, user_description TEXT, sector INT, category INT, is_credit BOOLEAN, date_created DATE, created_by INT, FOREIGN KEY (sector) REFERENCES sectors(id) FOREIGN KEY (category) REFERENCES categories(id) FOREIGN KEY (created_by) REFERENCES users(id))''')
+        cur.execute('''CREATE TABLE IF NOT EXISTS niches (id INT PRIMARY KEY, name TEXT, user_description TEXT, sector INT, category INT, subcategory INT, is_credit BOOLEAN, date_created DATE, created_by INT,FOREIGN KEY (sector) REFERENCES sectors(id) FOREIGN KEY (category) REFERENCES categories(id) FOREIGN KEY (subcategory) REFERENCES subcategories(id) FOREIGN KEY (created_by) REFERENCES users(id))''')
+
         
         #cur.execute('''CREATE TABLE IF NOT EXISTS budget (ID, year INTEGER, month INTEGER, number_transactions INTEGER, total_in REAL, total_out REAL, total_unique_descriptions INTEGER)''')
         conn.commit()

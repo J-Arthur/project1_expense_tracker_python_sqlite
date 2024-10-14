@@ -69,7 +69,7 @@ def process_transactions():
     
     # Pull all categories into lists
     categories = [row[0] for row in cur.execute('''SELECT title FROM categories''').fetchall()]
-    sub_categories = [row[0] for row in cur.execute('''SELECT title FROM sub_categories''').fetchall()]
+    subcategories = [row[0] for row in cur.execute('''SELECT title FROM sub_categories''').fetchall()]
     niches = [row[0] for row in cur.execute('''SELECT title FROM niche''').fetchall()]
     sectors = [row[0] for row in cur.execute('''SELECT title FROM sectors''').fetchall()]
     transactions = pd.read_csv(file_path)

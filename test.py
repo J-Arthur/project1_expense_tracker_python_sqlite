@@ -4,6 +4,8 @@ import os
 import datetime
 from fuzzywuzzy import fuzz
 print("Hello World")
+global current_user
+global current_user_id
 
 def on_startup():
     if not os.path.exists('users.db'):
@@ -13,7 +15,7 @@ def on_startup():
     else:
         print("Db already exists")
         get_user()
-        main_menu()
+
 
 def create_db():
     conn = sqlite3.connect('users.db')
@@ -48,7 +50,6 @@ def get_user():
         current_user_id = input("Please select a user (ID): ")
         current_user = cur.execute('''SELECT name FROM users WHERE id = ?''', (current_user_id,)).fetchone()[0]
         print("Welcome back " + current_user)
-        main_menu()
     conn.close()
 
 def create_new_user():
@@ -68,7 +69,6 @@ def create_new_user():
          current_user_id = cur.lastrowid
          conn.close()
          print("User " + current_user + " created with annual income of " + str(yearly_income))
-         main_menu()
      else:
             hourly_rate = float(input("Please enter your hourly rate: "))
             weekly_hours = float(input("Please enter your estimated weekly hours: "))
@@ -80,7 +80,6 @@ def create_new_user():
             current_user_id = cur.lastrowid
             conn.close()
             print("User " + current_user + " created with calculated annual income of " + str(yearly_income))
-            main_menu()
 
 def create_new_budget():
     global current_user
@@ -126,26 +125,41 @@ def process_transactions():
     unique_pairs = cur.fetchall()
     unique_pairs = pd.DataFrame(unique_pairs, columns=['processed_description', 'category', 'sub_category', 'niche', 'sector']) 
     print("pairs retreived")
-    cur.execute('''SELECT cnum FROM cards WHERE u_id = "current_user_id"''')
-    cnum = cur.fetchall()
-    new_transactions = pd.read_csv(input("Please enter current file name: ") + '.csv')
-    new_transactions = pre_process_transactions(unique_pairs, new_transactions, cnum)
-    new_transactions = categorise_transaction(new_transactions, unique_pairs)
-    new_transactions = manual_edits(new_transactions)
-    cur.execute('''INSERT INTO m_transactions (date_uploaded, date_transaction, description, amount, processed_description, card_num, user_id, sector, category, subcategory, niche) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)''', (datetime.datetime.now(), new_transactions['date_transaction'], new_transactions['description'], new_transactions['amount'], new_transactions['processed_description'], new_transactions['card'], current_user_id, new_transactions['sector'], new_transactions['category'], new_transactions['subcategory'], new_transactions['niche']))
+    cur.execute('''SELECT card_num FROM cards WHERE user_id = "current_user_id"''')
+    card_num = cur.fetchall()
+    schema = ['date_transaction', 'amount', 'description', 'balance']
+    new_transactions = pd.read_csv(input("Please enter current file name: ") + '.csv',  names = schema, header = None)
+    new_transactions = pre_process_transactions(unique_pairs, new_transactions, card_num)
+    print(new_transactions)
+    #new_transactions = categorise_transaction(new_transactions, unique_pairs)
+    #new_transactions = manual_edits(new_transactions)
+    #cur.execute('''INSERT INTO m_transactions (date_uploaded, date_transaction, description, amount, processed_description, card_num, user_id, sector, category, subcategory, niche) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)''', (datetime.datetime.now(), new_transactions['date_transaction'], new_transactions['description'], new_transactions['amount'], new_transactions['processed_description'], new_transactions['card'], current_user_id, new_transactions['sector'], new_transactions['category'], new_transactions['subcategory'], new_transactions['niche']))
     print("Transactions processed")
 
-def pre_process_transactions(unique_pairs, new_transactions, cnum):
+def get_table_schema(table_name):
+    conn = sqlite3.connect('users.db')
+    cur = conn.cursor()
+    cur.execute(f'PRAGMA table_info({table_name})')
+    schema = cur.fetchall()
+    conn.close()
+    return [column[1] for column in schema]  # Extract column names
+
+def pre_process_transactions(unique_pairs, new_transactions, card_num):
+    max_len = unique_pairs['processed_description'].str.len().fillna(50).max()
+    if pd.isna(max_len):
+        max_len = 50
     new_transactions['processed_description'] = new_transactions['description'].str.lower()
     new_transactions['processed_description'] = new_transactions['processed_description'].str.replace('[^a-zA-Z]', '')
-    new_transactions['processed_description'] = new_transactions['processed_description'].str.ljust(unique_pairs['description'].str.len().max(), fillchar=' ')
+    new_transactions['processed_description'] = new_transactions['processed_description'].str.ljust(int(max_len), fillchar=' ')
+    new_transactions['amount'] = new_transactions['amount'].replace({'-': '', '+': ''}, regex=True)
     print("Descriptions processed")
-    patterns = cnum
+    patterns = card_num
     new_transactions['card'] = None
     for pattern in patterns:
-        matches = new_transactions['description'].str.extract(pattern)
-        new_transactions['card'] = new_transactions['card'].combine_first(matches[0])
-        print("Card numbers extracted")
+            matches = new_transactions['description'].str.extract(pattern)
+            new_transactions['card'] = new_transactions['card'].combine_first(matches[0])
+            print("Card numbers extracted")
+    
     return new_transactions
 
 def categorise_transaction(new_transactions, unique_pairs):
@@ -162,7 +176,11 @@ def categorise_transaction(new_transactions, unique_pairs):
 
         if len(potential_matches) == 1:
             new_transactions.loc[index, ['category', 'sub_category', 'niche', 'sector']] = potential_matches[0][['category', 'sub_category', 'niche', 'sector']]
-        else:
+        elif len(potential_matches) == 0:
+            print(f"No matches found for {row['description']} with amount {row['amount']}")
+            category, subcategory, niche, sector, unique_pairs = add_new_category(row['description'], row['amount'], row['date_transaction'], unique_pairs)
+
+        else:    
             print(f"Potential matches for {row['description']} with amount {row['amount']} are:")
             for i, match in enumerate(potential_matches):
                 print(f"{i+1}. {match['description']}, {match['category']}, {match['sub_category']}, {match['niche']}, {match['sector']}")
@@ -353,3 +371,4 @@ def main_menu():
         main_menu()       
         
 on_startup()
+main_menu()

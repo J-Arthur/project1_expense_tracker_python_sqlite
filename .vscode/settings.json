@@ -1,4 +1,9 @@
 {
     "python.analysis.typeCheckingMode": "basic",
-    "workbench.colorTheme": "Monokai Dimmed"
+    "workbench.colorTheme": "Monokai Dimmed",
+    "python.testing.pytestArgs": [
+        "."
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true
 }

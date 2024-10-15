@@ -8,6 +8,10 @@ print("Hello World")
 global current_user
 global current_user_id
 
+pd.set_option('display.max_columns', None)  # Show all columns
+pd.set_option('display.max_rows', None)     # Show all rows
+pd.set_option('display.max_colwidth', None) # Show full column width
+pd.set_option('display.width', None)        # Auto-detect the display width
 
 def on_startup():
     if not os.path.exists('test.db'):
@@ -152,73 +156,81 @@ def categorise_transactions(new_transactions, unique_pairs):
             print(f"If none of the above are correct please enter {add_new}")
             selection = int(input("Please select the correct match: "))
             if selection == add_new:
-                category, subcategory, niche, sector, unique_pairs = assign_category(row['description'], row['amount'], row['date_transaction'], unique_pairs)
-                new_transactions.loc[index, ['category', 'sub_category', 'niche', 'sector']] = [category, subcategory, niche, sector]
+                modified_row, unique_pairs = assign_category(row, unique_pairs)
+                new_transactions.loc[index] = modified_row
                 
             else:
                 new_transactions.loc[index, ['category', 'sub_category', 'niche', 'sector']] = potential_matches[selection-1][['category', 'sub_category', 'niche', 'sector']]
                 print("Transactions categorised")
         else:
             print(f"No matches found for {row['description']} with amount {row['amount']}")
-            category, subcategory, niche, sector, unique_pairs = assign_category(row['description'], row['amount'], row['date_transaction'], unique_pairs)
-            new_transactions.loc[index, ['category', 'sub_category', 'niche', 'sector']] = [category, subcategory, niche, sector]
+            modified_row, unique_pairs = assign_category(row, unique_pairs)
+            new_transactions.loc[index] = modified_row
                 
     return new_transactions
 
-def assign_category(description, amount, date_transaction, unique_pairs):
+def assign_category(row, unique_pairs):
     global current_user
     global current_user_id
     conn = sqlite3.connect('test.db')
     cur = conn.cursor()
-    sectors = [row[0] for row in cur.execute('''SELECT name FROM sectors''').fetchall()]
-    categories = [row[0] for row in cur.execute('''SELECT name FROM categories''').fetchall()]
-    subcategories = [row[0] for row in cur.execute('''SELECT name FROM subcategories''').fetchall()]
-    niches = [row[0] for row in cur.execute('''SELECT name FROM niches''').fetchall()]
-    print(f"Adding new category for {description} {amount} {date_transaction}")
+    sectors = [{'rowid': row[0], 'name': row[1]} for row in cur.execute('''SELECT rowid, name FROM sectors''').fetchall()]
+    categories = [{'rowid': row[0], 'name': row[1]} for row in cur.execute('''SELECT rowid, name FROM categories''').fetchall()]
+    subcategories = [{'rowid': row[0], 'name': row[1]} for row in cur.execute('''SELECT rowid, name FROM subcategories''').fetchall()]
+    niches = [{'rowid': row[0], 'name': row[1]} for row in cur.execute('''SELECT rowid, name FROM niches''').fetchall()]
+
+    print(f"Adding new category for {row}")
 
     sector, new_sector = new_addition_prompt(sectors, "Please select a sector or add a new one:")
+    sector_id = cur.execute('''SELECT rowid FROM sectors WHERE name = ?''', (sector,)).fetchone()
     if new_sector:
         is_credit = input("Is this sector a credit sector? (yes/no): ").lower() == 'yes'
         user_description = input("Please enter a description for this new sector: ")
-        sectors.append(sector)
         cur.execute('''INSERT INTO sectors (name, is_credit, created_by, date_created, user_description) VALUES (?,?,?,?,?)''', (sector, is_credit, current_user_id, datetime.now(), user_description))
         conn.commit()
+        sector_id = cur.lastrowid
 
     category, new_category = new_addition_prompt(categories, "Please select a category or add a new one:")
+    category_id = cur.execute('''SELECT rowid FROM categories WHERE name = ?''', (category,)).fetchone()
     if new_category:
         is_essential = input("Is this category essential? (yes/no): ").lower() == 'yes'
         user_description = input("Please enter a description for this new category: ")
-        categories.append(category)
-        
-        cur.execute('''INSERT INTO categories (name, is_essential, created_by, date_created, user_description) VALUES (?,?,?,?,?)''', (category, is_essential, current_user_id, datetime.now(), user_description))
+        cur.execute('''INSERT INTO categories (name, is_essential, created_by, date_created, user_description, sector) VALUES (?,?,?,?,?,?)''', (category, is_essential, current_user_id, datetime.now(), user_description, sector_id))
         conn.commit()
+        category_id = cur.lastrowid
 
     subcategory, new_subcategory = new_addition_prompt(subcategories, "Please select a subcategory or add a new one:")
+    subcategory_id = cur.execute('''SELECT rowid FROM subcategories WHERE name = ?''', (subcategory,)).fetchone()
     if new_subcategory:
         is_essential = input("Is this subcategory essential? (yes/no): ").lower() == 'yes'
         user_description = input("Please enter a description for this new subcategory: ")
-        subcategories.append(subcategory)
-        cur.execute('''INSERT INTO subcategories (name, is_essential, created_by, date_created, user_description) VALUES (?,?,?,?,?)''', (subcategory, is_essential, current_user_id, datetime.now(), user_description))
+        cur.execute('''INSERT INTO subcategories (name, is_essential, created_by, date_created, user_description, sector, category) VALUES (?,?,?,?,?,?,?)''', (subcategory, is_essential, current_user_id, datetime.now(), user_description, sector_id, category_id))
         conn.commit()
+        subcategory_id = cur.lastrowid
 
     niche, new_niche = new_addition_prompt(niches, "Please select a niche or add a new one:")
+    niche_id = cur.execute('''SELECT rowid FROM niches WHERE name = ?''', (niche,)).fetchone()
     if new_niche:
         is_essential = input("Is this niche essential? (yes/no): ").lower() == 'yes'
         user_description = input("Please enter a description for this new niche: ")
-        niches.append(niche)
-        cur.execute('''INSERT INTO niches (name, is_essential, created_by, date_created, user_description) VALUES (?,?,?,?,?)''', (niche, is_essential, current_user_id, datetime.now(), user_description))
+        cur.execute('''INSERT INTO niches (name, is_essential, created_by, date_created, user_description, sector, category, subcategory) VALUES (?,?,?,?,?,?,?,?)''', (niche, is_essential, current_user_id, datetime.now(), user_description, sector_id, category_id, subcategory_id))
         conn.commit()
+        niche_id = cur.lastrowid
     conn.close()
-    
-    new_row = pd.DataFrame([{'description': description, 'amount': amount, 'date_transaction': date_transaction, 'sector': sector, 'category': category, 'subcategory': subcategory, 'niche': niche}])
-    unique_pairs = pd.concat([unique_pairs, new_row], ignore_index=True)
-    
-    return category, subcategory, niche, sector, unique_pairs
 
-def new_addition_prompt(options,prompt_text):
+    #row['category'] = category_id
+    #row['subcategory'] = subcategory_id
+    #row['niche'] = niche_id
+    row.update({'sector': sector_id, 'category': category_id, 'subcategory': subcategory_id, 'niche': niche_id})
+    print(row)
+    unique_pairs = pd.concat([unique_pairs, row], ignore_index=True)
+    print(unique_pairs.head())   
+    return row, unique_pairs
+
+def new_addition_prompt(options, prompt_text):
     print(prompt_text)
     for i, option in enumerate(options):
-        print(f"{i+1}. {option}")
+        print(f"{i+1}. {option['rowid']}. {option['name']}")
     print(f"{len(options)+1}. Add new:")
     print(f"{len(options)+2}. Skip.")
     choice = int(input("Please select an option: "))
@@ -228,7 +240,8 @@ def new_addition_prompt(options,prompt_text):
     elif choice == len(options) + 2:
         return None, False
     else:
-        return options[choice - 1], False
+        chosen_option = options[choice - 1]['name']
+        return chosen_option, False
     
 
 on_startup()

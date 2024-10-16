@@ -1,7 +1,7 @@
 import sqlite3
 import pandas as pd
 import os
-import datetime
+from datetime import datetime
 from fuzzywuzzy import fuzz
 print("Hello World")
 global current_user
@@ -9,48 +9,45 @@ global current_user_id
 
 def on_startup():
     if not os.path.exists('users.db'):
+        def create_db():
+            conn = sqlite3.connect('users.db')
+            cur = conn.cursor()
+            cur.execute('''CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, dob DATE, yearly_income REAL, hourly_rate REAL, weekly_hours INT, net_balance REAL, gross_balance REAL, date_created DATE )''')
+            cur.execute('''CREATE TABLE IF NOT EXISTS m_transactions (id INTEGER PRIMARY KEY, date_uploaded DATE, date_transaction DATE, description TEXT, amount REAL, processed_description TEXT, card_num INT, user_id INT, sector INT, category INT, subcategory INT, niche INT, FOREIGN KEY (user_id) REFERENCES users(id) FOREIGN KEY (card_num) REFERENCES cards(id) FOREIGN KEY (sector) REFERENCES sectors(id) FOREIGN KEY (category) REFERENCES categories(id) FOREIGN KEY (subcategory) REFERENCES subcategories(id) FOREIGN KEY (niche) REFERENCES niches(id))''')
+            cur.execute('''CREATE TABLE IF NOT EXISTS cards (id INTEGER PRIMARY KEY, card_num INT, user_id INT, FOREIGN KEY (user_id) REFERENCES users(id))''')
+            cur.execute('''CREATE TABLE IF NOT EXISTS budget_limits (id INTEGER PRIMARY KEY, user_id INT, sector INT, category INT, subcategory INT, niche INT, amount_limit REAL, FOREIGN KEY (user_id) REFERENCES users(id) FOREIGN KEY (sector) REFERENCES sectors(id) FOREIGN KEY (category) REFERENCES categories(id) FOREIGN KEY (subcategory) REFERENCES subcategories(id) FOREIGN KEY (niche) REFERENCES niches(id))''')
+            cur.execute('''CREATE TABLE IF NOT EXISTS budget_history (id INTEGER PRIMARY KEY, user_id INT, date DATE, year INT, month INT, number_transactions INTEGER, total_in REAL, total_out REAL, total_unique_descriptions INTEGER, FOREIGN KEY (user_id) REFERENCES users(id))''')
+            cur.execute('''CREATE TABLE IF NOT EXISTS budget_running_summary (id INTEGER PRIMARY KEY, user_id INT, date DATE, year INT, month INT, number_transactions INTEGER, total_in REAL, total_out REAL, total_unique_descriptions INTEGER, FOREIGN KEY (user_id) REFERENCES users(id))''')
+            cur.execute('''CREATE TABLE IF NOT EXISTS sectors (id INTEGER PRIMARY KEY, name TEXT, user_description TEXT, is_credit BOOLEAN, date_created DATE, created_by INT, FOREIGN KEY (created_by) REFERENCES users(id))''')
+            cur.execute('''CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY, name TEXT, user_description TEXT, sector INT, is_credit BOOLEAN, is_essential BOOLEAN, date_created DATE, created_by INT, FOREIGN KEY (sector) REFERENCES sectors(id) FOREIGN KEY (created_by) REFERENCES users(id))''')
+            cur.execute('''CREATE TABLE IF NOT EXISTS subcategories (id INTEGER PRIMARY KEY, name TEXT, user_description TEXT, sector INT, category INT, is_credit BOOLEAN, is_essential BOOLEAN, date_created DATE, created_by INT, FOREIGN KEY (sector) REFERENCES sectors(id) FOREIGN KEY (category) REFERENCES categories(id) FOREIGN KEY (created_by) REFERENCES users(id))''')
+            cur.execute('''CREATE TABLE IF NOT EXISTS niches (id INTEGER PRIMARY KEY, name TEXT, user_description TEXT, sector INT, category INT, subcategory INT, is_credit BOOLEAN, is_essential BOOLEAN, date_created DATE, created_by INT,FOREIGN KEY (sector) REFERENCES sectors(id) FOREIGN KEY (category) REFERENCES categories(id) FOREIGN KEY (subcategory) REFERENCES subcategories(id) FOREIGN KEY (created_by) REFERENCES users(id))''')
+            conn.commit()
+            conn.close()
         create_db()
         print("Db created")
         create_new_user()
     else:
         print("Db already exists")
+        def get_user():
+            global current_user
+            global current_user_id
+            conn = sqlite3.connect('users.db')
+            cur = conn.cursor()
+            cur.execute('''SELECT id, name FROM users ''')
+            users = cur.fetchall()
+            if not users:
+                print("No users found")
+                create_new_user()
+            else:
+                print("Users found")
+                for user in users:
+                    print(f"{user[0]}. {user[1]}")
+                current_user_id = input("Please select a user (ID): ")
+                current_user = cur.execute('''SELECT name FROM users WHERE id = ?''', (current_user_id,)).fetchone()[0]
+                print("Welcome back " + current_user)
+            conn.close()
         get_user()
-
-
-def create_db():
-    conn = sqlite3.connect('users.db')
-    cur = conn.cursor()
-    cur.execute('''CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, dob DATE, yearly_income REAL, hourly_rate REAL, weekly_hours INT, net_balance REAL, gross_balance REAL, date_created DATE )''')
-    cur.execute('''CREATE TABLE IF NOT EXISTS m_transactions (id INTEGER PRIMARY KEY, date_uploaded DATE, date_transaction DATE, description TEXT, amount REAL, processed_description TEXT, card_num INT, user_id INT, sector INT, category INT, subcategory INT, niche INT, FOREIGN KEY (user_id) REFERENCES users(id) FOREIGN KEY (card_num) REFERENCES cards(id) FOREIGN KEY (sector) REFERENCES sectors(id) FOREIGN KEY (category) REFERENCES categories(id) FOREIGN KEY (subcategory) REFERENCES subcategories(id) FOREIGN KEY (niche) REFERENCES niches(id))''')
-    cur.execute('''CREATE TABLE IF NOT EXISTS cards (id INTEGER PRIMARY KEY, card_num INT, user_id INT, FOREIGN KEY (user_id) REFERENCES users(id))''')
-    cur.execute('''CREATE TABLE IF NOT EXISTS budget_limits (id INTEGER PRIMARY KEY, user_id INT, sector INT, category INT, subcategory INT, niche INT, amount_limit REAL, FOREIGN KEY (user_id) REFERENCES users(id) FOREIGN KEY (sector) REFERENCES sectors(id) FOREIGN KEY (category) REFERENCES categories(id) FOREIGN KEY (subcategory) REFERENCES subcategories(id) FOREIGN KEY (niche) REFERENCES niches(id))''')
-    cur.execute('''CREATE TABLE IF NOT EXISTS budget_history (id INTEGER PRIMARY KEY, user_id INT, date DATE, year INT, month INT, number_transactions INTEGER, total_in REAL, total_out REAL, total_unique_descriptions INTEGER, FOREIGN KEY (user_id) REFERENCES users(id))''')
-    cur.execute('''CREATE TABLE IF NOT EXISTS budget_running_summary (id INTEGER PRIMARY KEY, user_id INT, date DATE, year INT, month INT, number_transactions INTEGER, total_in REAL, total_out REAL, total_unique_descriptions INTEGER, FOREIGN KEY (user_id) REFERENCES users(id))''')
-    cur.execute('''CREATE TABLE IF NOT EXISTS sectors (id INTEGER PRIMARY KEY, name TEXT, user_description TEXT, is_credit BOOLEAN, date_created DATE, created_by INT, FOREIGN KEY (created_by) REFERENCES users(id))''')
-    cur.execute('''CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY, name TEXT, user_description TEXT, sector INT, is_credit BOOLEAN, date_created DATE, created_by INT, FOREIGN KEY (sector) REFERENCES sectors(id) FOREIGN KEY (created_by) REFERENCES users(id))''')
-    cur.execute('''CREATE TABLE IF NOT EXISTS subcategories (id INTEGER PRIMARY KEY, name TEXT, user_description TEXT, sector INT, category INT, is_credit BOOLEAN, date_created DATE, created_by INT, FOREIGN KEY (sector) REFERENCES sectors(id) FOREIGN KEY (category) REFERENCES categories(id) FOREIGN KEY (created_by) REFERENCES users(id))''')
-    cur.execute('''CREATE TABLE IF NOT EXISTS niches (id INTEGER PRIMARY KEY, name TEXT, user_description TEXT, sector INT, category INT, subcategory INT, is_credit BOOLEAN, date_created DATE, created_by INT,FOREIGN KEY (sector) REFERENCES sectors(id) FOREIGN KEY (category) REFERENCES categories(id) FOREIGN KEY (subcategory) REFERENCES subcategories(id) FOREIGN KEY (created_by) REFERENCES users(id))''')
-    conn.commit()
-    conn.close()
-
-def get_user():
-    global current_user
-    global current_user_id
-    conn = sqlite3.connect('users.db')
-    cur = conn.cursor()
-    cur.execute('''SELECT id, name FROM users ''')
-    users = cur.fetchall()
-    if not users:
-        print("No users found")
-        create_new_user()
-    else:
-        print("Users found")
-        for user in users:
-            print(f"{user[0]}. {user[1]}")
-        current_user_id = input("Please select a user (ID): ")
-        current_user = cur.execute('''SELECT name FROM users WHERE id = ?''', (current_user_id,)).fetchone()[0]
-        print("Welcome back " + current_user)
-    conn.close()
 
 def create_new_user():
      global current_user
@@ -82,55 +79,53 @@ def create_new_user():
             print("User " + current_user + " created with calculated annual income of " + str(yearly_income))
 
 def create_new_budget():
+    def archive_budget():
+        cur.execute('''SELECT * FROM budget_running_summary WHERE user_id = ? ORDER BY rowid DESC LIMIT 1''', (current_user_id,))
+        last_row = cur.fetchone()
+        if last_row:
+            cur.execute('''INSERT INTO budget_history (user_id, date, year, month, number_transactions, total_in, total_out, total_unique_descriptions)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)''', last_row[1:])
+            cur.execute('''DELETE FROM budget_running_summary WHERE rowid = ?''', (last_row[0],))
+            conn.commit()
+            conn.close()
+            print("Archived last budget summary")
+        else:
+            print("No budget summary found")
+            conn.close()
+    
     global current_user
     global current_user_id
     conn = sqlite3.connect('users.db')
     cur = conn.cursor()
     print(f"You are starting a new budget on {datetime.datetime.now()} as {current_user}")
-    archive_budget(current_user_id)
+    archive_budget()
     cur.execute('''INSERT INTO budget_running_summary (user_id, date, year, month, number_transactions, total_in, total_out, total_unique_descriptions) VALUES (?,?,?,?,?,?,?,?)''', (current_user_id, datetime.datetime.now(), datetime.datetime.now().year, datetime.datetime.now().month, 0, 0, 0, 0))
     conn.commit()
     conn.close()
-    if input("Would you like to set some savings goals? (y/n) ") == 'y':
-        print("Lets enter some savings goals")
-        main_menu()
-        #set_savings_goals()
-    else:
-        print("We are going to get you to process some transactions to get started. You will need to categorise these manually to begin with but the longer you use this the fewer transactions you will need to manually adjust.")
-        main_menu()
-        #process_transactions()
-
-def archive_budget(current_user_id):
-    conn = sqlite3.connect('users.db')
-    cur = conn.cursor()
-    cur.execute('''SELECT * FROM budget_running_summary WHERE user_id = ? ORDER BY rowid DESC LIMIT 1''', (current_user_id,))
-    last_row = cur.fetchone()
-    if last_row:
-        cur.execute('''INSERT INTO budget_history (user_id, date, year, month, number_transactions, total_in, total_out, total_unique_descriptions)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)''', last_row[1:])
-        cur.execute('''DELETE FROM budget_running_summary WHERE rowid = ?''', (last_row[0],))
-        conn.commit()
-        conn.close()
-        print("Archived last budget summary")
-    else:
-        print("No budget summary found")
-        conn.close()
+    return
 
 def process_transactions():
     global current_user
     global current_user_id
-    conn = sqlite3.connect('users.db')
-    cur = conn.cursor()
-    cur.execute('''SELECT DISTINCT processed_description, category, subcategory, niche, sector FROM m_transactions''')
-    unique_pairs = cur.fetchall()
-    unique_pairs = pd.DataFrame(unique_pairs, columns=['processed_description', 'category', 'sub_category', 'niche', 'sector']) 
-    print("pairs retreived")
-    cur.execute('''SELECT card_num FROM cards WHERE user_id = "current_user_id"''')
-    card_num = cur.fetchall()
-    schema = ['date_transaction', 'amount', 'description', 'balance']
-    new_transactions = pd.read_csv(input("Please enter current file name: ") + '.csv',  names = schema, header = None)
+    def get_files():
+        conn = sqlite3.connect('users.db')
+        cur = conn.cursor()
+        cur.execute('''SELECT DISTINCT processed_description, category, subcategory, niche, sector FROM m_transactions''')
+        unique_pairs = cur.fetchall()
+        unique_pairs = pd.DataFrame(unique_pairs, columns=['processed_description', 'category', 'subcategory', 'niche', 'sector']) 
+        nums = cur.execute('''SELECT card_num FROM cards WHERE user_id = "current_user_id"''')
+        card_num = nums.fetchall()
+        schema = ['date_transaction', 'amount', 'description', 'balance']
+        new_transactions = pd.read_csv(input("Please enter current file name: ") + '.csv',  names = schema, header = None)
+        new_transactions['processed_description'] = ''
+        new_transactions['card'] = None
+        new_transactions['category'] = ''
+        new_transactions['subcategory'] = ''
+        new_transactions['niche'] = ''
+        new_transactions['sector'] = ''
+        return unique_pairs, new_transactions, card_num
+    unique_pairs, new_transactions, card_num = get_files()
     new_transactions = pre_process_transactions(unique_pairs, new_transactions, card_num)
-    print(new_transactions)
     #new_transactions = categorise_transaction(new_transactions, unique_pairs)
     #new_transactions = manual_edits(new_transactions)
     #cur.execute('''INSERT INTO m_transactions (date_uploaded, date_transaction, description, amount, processed_description, card_num, user_id, sector, category, subcategory, niche) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)''', (datetime.datetime.now(), new_transactions['date_transaction'], new_transactions['description'], new_transactions['amount'], new_transactions['processed_description'], new_transactions['card'], current_user_id, new_transactions['sector'], new_transactions['category'], new_transactions['subcategory'], new_transactions['niche']))
@@ -145,6 +140,21 @@ def get_table_schema(table_name):
     return [column[1] for column in schema]  # Extract column names
 
 def pre_process_transactions(unique_pairs, new_transactions, card_num):
+    def update_transaction_date(new_transactions):
+        
+        def extract_date(description):
+            potential_date = description[-10:]
+            try:
+                new_date = datetime.strptime(potential_date, '%d/%m/%Y')
+                #new_date = new_date.to_pydatetime()
+                return new_date
+            except ValueError:
+                return None
+        new_transactions['new_date'] = new_transactions['description'].apply(extract_date)
+        new_transactions['date_transaction'] = new_transactions['date_transaction'].where(new_transactions['new_date'].isnull(), new_transactions['new_date'])
+        new_transactions.drop(columns=['new_date'], inplace=True)
+        return new_transactions
+
     max_len = unique_pairs['processed_description'].str.len().fillna(50).max()
     if pd.isna(max_len):
         max_len = 50

@@ -37,9 +37,9 @@ def create_db():
     cur.execute('''CREATE TABLE IF NOT EXISTS budget_history (id INTEGER PRIMARY KEY, user_id INT, date DATE, year INT, month INT, number_transactions INTEGER, total_in REAL, total_out REAL, total_unique_descriptions INTEGER, FOREIGN KEY (user_id) REFERENCES users(id))''')
     cur.execute('''CREATE TABLE IF NOT EXISTS budget_running_summary (id INTEGER PRIMARY KEY, user_id INT, date DATE, year INT, month INT, number_transactions INTEGER, total_in REAL, total_out REAL, total_unique_descriptions INTEGER, FOREIGN KEY (user_id) REFERENCES users(id))''')
     cur.execute('''CREATE TABLE IF NOT EXISTS sectors (id INTEGER PRIMARY KEY, name TEXT, user_description TEXT, is_credit BOOLEAN, date_created DATE, created_by INT, FOREIGN KEY (created_by) REFERENCES users(id))''')
-    cur.execute('''CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY, name TEXT, user_description TEXT, sector INT, is_credit BOOLEAN, is_essential BOOLEAN, date_created DATE, created_by INT, FOREIGN KEY (sector) REFERENCES sectors(id) FOREIGN KEY (created_by) REFERENCES users(id))''')
-    cur.execute('''CREATE TABLE IF NOT EXISTS subcategories (id INTEGER PRIMARY KEY, name TEXT, user_description TEXT, sector INT, category INT, is_credit BOOLEAN, is_essential BOOLEAN, date_created DATE, created_by INT, FOREIGN KEY (sector) REFERENCES sectors(id) FOREIGN KEY (category) REFERENCES categories(id) FOREIGN KEY (created_by) REFERENCES users(id))''')
-    cur.execute('''CREATE TABLE IF NOT EXISTS niches (id INTEGER PRIMARY KEY, name TEXT, user_description TEXT, sector INT, category INT, subcategory INT, is_credit BOOLEAN, is_essential BOOLEAN, date_created DATE, created_by INT,FOREIGN KEY (sector) REFERENCES sectors(id) FOREIGN KEY (category) REFERENCES categories(id) FOREIGN KEY (subcategory) REFERENCES subcategories(id) FOREIGN KEY (created_by) REFERENCES users(id))''')
+    cur.execute('''CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY, name TEXT, user_description TEXT, sector INT, is_credit BOOLEAN, is_essential BOOLEAN date_created DATE, created_by INT, FOREIGN KEY (sector) REFERENCES sectors(id) FOREIGN KEY (is_credit) REFERENCES sectors(is_credit) FOREIGN KEY (created_by) REFERENCES users(id))''')
+    cur.execute('''CREATE TABLE IF NOT EXISTS subcategories (id INTEGER PRIMARY KEY, name TEXT, user_description TEXT, sector INT, category INT, is_credit BOOLEAN, date_created DATE, created_by INT, FOREIGN KEY (sector) REFERENCES sectors(id) FOREIGN KEY (category) REFERENCES categories(id) FOREIGN KEY (is_credit) REFERENCES sectors(is_credit) FOREIGN KEY (created_by) REFERENCES users(id))''')
+    cur.execute('''CREATE TABLE IF NOT EXISTS niches (id INTEGER PRIMARY KEY, name TEXT, user_description TEXT, sector INT, category INT, subcategory INT, is_credit BOOLEAN, date_created DATE, created_by INT,FOREIGN KEY (sector) REFERENCES sectors(id) FOREIGN KEY (category) REFERENCES categories(id) FOREIGN KEY (subcategory) REFERENCES subcategories(id) FOREIGN KEY (is_credit) REFERENCES sectors(is_credit) FOREIGN KEY (created_by) REFERENCES users(id))''')
     conn.commit()
     conn.close()
 
@@ -57,21 +57,38 @@ def create_default_user():
 def process_transactions():
     global current_user
     global current_user_id
-    conn = sqlite3.connect('test.db')
-    cur = conn.cursor()
-    cur.execute('''SELECT DISTINCT processed_description, category, subcategory, niche, sector FROM m_transactions''')
-    unique_pairs = cur.fetchall()
-    unique_pairs = pd.DataFrame(unique_pairs, columns=['processed_description', 'category', 'sub_category', 'niche', 'sector']) 
-    print("pairs retreived")
-    #cur.execute('''SELECT card_num FROM cards WHERE user_id = "current_user_id"''')
-    card_num = ['4626']
-    schema = ['date_transaction', 'amount', 'description', 'balance']
-    new_transactions = pd.read_csv(input("Please enter current file name: ") + '.csv',  names = schema, header = None)
+    def get_files():
+        conn = sqlite3.connect('test.db')
+        cur = conn.cursor()
+        cur.execute('''SELECT DISTINCT processed_description, category, subcategory, niche, sector FROM m_transactions''')
+        unique_pairs = cur.fetchall()
+        unique_pairs = pd.DataFrame(unique_pairs, columns=['processed_description', 'category', 'subcategory', 'niche', 'sector']) 
+        nums = cur.execute('''SELECT card_num FROM cards WHERE user_id = "current_user_id"''')
+        card_num = nums.fetchall()
+        schema = ['date_transaction', 'amount', 'description', 'balance']
+        new_transactions = pd.read_csv(input("Please enter current file name: ") + '.csv',  names = schema, header = None)
+        new_transactions['processed_description'] = ''
+        new_transactions['card'] = None
+        new_transactions['category'] = ''
+        new_transactions['subcategory'] = ''
+        new_transactions['niche'] = ''
+        new_transactions['sector'] = ''
+        return unique_pairs, new_transactions, card_num
+    unique_pairs, new_transactions, card_num = get_files()
     new_transactions = pre_process_transactions(unique_pairs, new_transactions, card_num)
-    print(new_transactions)
     new_transactions = categorise_transactions(new_transactions, unique_pairs)
     #new_transactions = manual_edits(new_transactions)
-    #cur.execute('''INSERT INTO m_transactions (date_uploaded, date_transaction, description, amount, processed_description, card_num, user_id, sector, category, subcategory, niche) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)''', (datetime.datetime.now(), new_transactions['date_transaction'], new_transactions['description'], new_transactions['amount'], new_transactions['processed_description'], new_transactions['card'], current_user_id, new_transactions['sector'], new_transactions['category'], new_transactions['subcategory'], new_transactions['niche']))
+    new_transactions['date_transaction'] = pd.to_datetime(new_transactions['date_transaction'], format='%d/%m/%Y')
+    for index, row in new_transactions.iterrows():
+        date_transaction_dt = row['date_transaction'].to_pydatetime()
+        conn = sqlite3.connect('test.db')
+        cur = conn.cursor()
+        cur.execute('''INSERT INTO m_transactions (date_uploaded, date_transaction, description, amount, processed_description, card_num, user_id, sector, category, subcategory, niche) VALUES (?,?,?,?,?,?,?,?,?,?,?)''', 
+                (datetime.now(), date_transaction_dt, row['description'], row['amount'], row['processed_description'], row['card'], current_user_id, row['sector'], row['category'], row['subcategory'], row['niche']))
+        conn.commit()
+        conn.close()    
+    filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_processed_{current_user}.csv"
+    new_transactions.to_csv(filename, index=False)
     print("Transactions processed")
 
 def pre_process_transactions(unique_pairs, new_transactions, card_num):
@@ -82,6 +99,7 @@ def pre_process_transactions(unique_pairs, new_transactions, card_num):
             potential_date = description[-10:]
             try:
                 new_date = datetime.strptime(potential_date, '%d/%m/%Y')
+                #new_date = new_date.to_pydatetime()
                 return new_date
             except ValueError:
                 return None
@@ -91,7 +109,6 @@ def pre_process_transactions(unique_pairs, new_transactions, card_num):
         
         # Update the date_transaction column with the new date where applicable
         new_transactions['date_transaction'] = new_transactions['date_transaction'].where(new_transactions['new_date'].isnull(), new_transactions['new_date'])
-        
         # Drop the temporary new_date column
         new_transactions.drop(columns=['new_date'], inplace=True)
         
@@ -124,7 +141,6 @@ def pre_process_transactions(unique_pairs, new_transactions, card_num):
 
     new_transactions['processed_description'] = new_transactions['description'].str.lower()
     new_transactions['card'] = new_transactions.apply(lambda row: extract_card_number(row, card_num), axis=1)
-    print(new_transactions['card'])
     new_transactions['processed_description'] = new_transactions['processed_description'].str.replace('[^a-zA-Z]', '', regex=True)
     new_transactions['processed_description'] = new_transactions['processed_description'].apply(remove_sequences)
     new_transactions['processed_description'] = new_transactions['processed_description'].str.ljust(int(max_len), fillchar=' ')
@@ -146,30 +162,34 @@ def categorise_transactions(new_transactions, unique_pairs):
                 potential_matches.append(unique_row)
                 
         if len(potential_matches)== 1:
-            new_transactions.loc[index, ['category', 'sub_category', 'niche', 'sector']] = potential_matches[0][['category', 'sub_category', 'niche', 'sector']]
+            new_transactions.loc[index, ['category', 'subcategory', 'niche', 'sector']] = potential_matches[0][['category', 'subcategory', 'niche', 'sector']]
         elif len(potential_matches) > 1:
             print(f"Potential matches for {row['description']} with amount {row['amount']} are:")
             for i, match in enumerate(potential_matches):
-                print(f"{i+1}. {match['description']}, {match['category']}, {match['sub_category']}, {match['niche']}, {match['sector']}")
+                print(f"{i+1}. {match['description']}, {match['category']}, {match['subcategory']}, {match['niche']}, {match['sector']}")
             
             add_new = len(potential_matches) + 1
             print(f"If none of the above are correct please enter {add_new}")
             selection = int(input("Please select the correct match: "))
             if selection == add_new:
-                modified_row, unique_pairs = assign_category(row, unique_pairs)
-                new_transactions.loc[index] = modified_row
-                
+                sector_id, category_id, subcategory_id, niche_id = assign_category(row)
+                new_transactions.loc[index, ['category', 'subcategory', 'niche', 'sector']] = [category_id, subcategory_id, niche_id, sector_id]
+                common_columns = new_transactions.columns.intersection(unique_pairs.columns)
+                row_to_move = new_transactions.loc[index, common_columns]
+                unique_pairs = pd.concat([unique_pairs, row_to_move.to_frame().T], ignore_index=True)            
             else:
-                new_transactions.loc[index, ['category', 'sub_category', 'niche', 'sector']] = potential_matches[selection-1][['category', 'sub_category', 'niche', 'sector']]
+                new_transactions.loc[index, ['category', 'subcategory', 'niche', 'sector']] = potential_matches[selection-1][['category', 'subcategory', 'niche', 'sector']]
                 print("Transactions categorised")
         else:
             print(f"No matches found for {row['description']} with amount {row['amount']}")
-            modified_row, unique_pairs = assign_category(row, unique_pairs)
-            new_transactions.loc[index] = modified_row
-                
+            sector_id, category_id, subcategory_id, niche_id = assign_category(row)
+            new_transactions.loc[index, ['category', 'subcategory', 'niche', 'sector']] = [category_id, subcategory_id, niche_id, sector_id]
+            common_columns = new_transactions.columns.intersection(unique_pairs.columns)
+            row_to_move = new_transactions.loc[index, common_columns]
+            unique_pairs = pd.concat([unique_pairs, row_to_move.to_frame().T], ignore_index=True)               
     return new_transactions
 
-def assign_category(row, unique_pairs):
+def assign_category(row):
     global current_user
     global current_user_id
     conn = sqlite3.connect('test.db')
@@ -179,10 +199,11 @@ def assign_category(row, unique_pairs):
     subcategories = [{'rowid': row[0], 'name': row[1]} for row in cur.execute('''SELECT rowid, name FROM subcategories''').fetchall()]
     niches = [{'rowid': row[0], 'name': row[1]} for row in cur.execute('''SELECT rowid, name FROM niches''').fetchall()]
 
-    print(f"Adding new category for {row}")
+    print(f"Adding new category for {row['description']} {row['amount']}")
 
     sector, new_sector = new_addition_prompt(sectors, "Please select a sector or add a new one:")
     sector_id = cur.execute('''SELECT rowid FROM sectors WHERE name = ?''', (sector,)).fetchone()
+    sector_id = sector_id[0] if sector_id else None
     if new_sector:
         is_credit = input("Is this sector a credit sector? (yes/no): ").lower() == 'yes'
         user_description = input("Please enter a description for this new sector: ")
@@ -192,6 +213,7 @@ def assign_category(row, unique_pairs):
 
     category, new_category = new_addition_prompt(categories, "Please select a category or add a new one:")
     category_id = cur.execute('''SELECT rowid FROM categories WHERE name = ?''', (category,)).fetchone()
+    category_id = category_id[0] if category_id else None
     if new_category:
         is_essential = input("Is this category essential? (yes/no): ").lower() == 'yes'
         user_description = input("Please enter a description for this new category: ")
@@ -201,31 +223,24 @@ def assign_category(row, unique_pairs):
 
     subcategory, new_subcategory = new_addition_prompt(subcategories, "Please select a subcategory or add a new one:")
     subcategory_id = cur.execute('''SELECT rowid FROM subcategories WHERE name = ?''', (subcategory,)).fetchone()
+    subcategory_id = subcategory_id[0] if subcategory_id else None
     if new_subcategory:
-        is_essential = input("Is this subcategory essential? (yes/no): ").lower() == 'yes'
         user_description = input("Please enter a description for this new subcategory: ")
-        cur.execute('''INSERT INTO subcategories (name, is_essential, created_by, date_created, user_description, sector, category) VALUES (?,?,?,?,?,?,?)''', (subcategory, is_essential, current_user_id, datetime.now(), user_description, sector_id, category_id))
+        cur.execute('''INSERT INTO subcategories (name, created_by, date_created, user_description, sector, category) VALUES (?,?,?,?,?,?)''', (subcategory, current_user_id, datetime.now(), user_description, sector_id, category_id))
         conn.commit()
         subcategory_id = cur.lastrowid
 
     niche, new_niche = new_addition_prompt(niches, "Please select a niche or add a new one:")
     niche_id = cur.execute('''SELECT rowid FROM niches WHERE name = ?''', (niche,)).fetchone()
+    niche_id = niche_id[0] if niche_id else None
     if new_niche:
-        is_essential = input("Is this niche essential? (yes/no): ").lower() == 'yes'
         user_description = input("Please enter a description for this new niche: ")
-        cur.execute('''INSERT INTO niches (name, is_essential, created_by, date_created, user_description, sector, category, subcategory) VALUES (?,?,?,?,?,?,?,?)''', (niche, is_essential, current_user_id, datetime.now(), user_description, sector_id, category_id, subcategory_id))
+        cur.execute('''INSERT INTO niches (name, created_by, date_created, user_description, sector, category, subcategory) VALUES (?,?,?,?,?,?,?)''', (niche, current_user_id, datetime.now(), user_description, sector_id, category_id, subcategory_id))
         conn.commit()
         niche_id = cur.lastrowid
     conn.close()
-
-    #row['category'] = category_id
-    #row['subcategory'] = subcategory_id
-    #row['niche'] = niche_id
-    row.update({'sector': sector_id, 'category': category_id, 'subcategory': subcategory_id, 'niche': niche_id})
-    print(row)
-    unique_pairs = pd.concat([unique_pairs, row], ignore_index=True)
-    print(unique_pairs.head())   
-    return row, unique_pairs
+ 
+    return sector_id, category_id, subcategory_id, niche_id
 
 def new_addition_prompt(options, prompt_text):
     print(prompt_text)
@@ -243,6 +258,97 @@ def new_addition_prompt(options, prompt_text):
         chosen_option = options[choice - 1]['name']
         return chosen_option, False
     
+
+generate_transaction_report:
+
+Overview
+total_income = SELECT SUM(m.amount) as total_income
+FROM m_transactions m
+JOIN sectors s ON m.sector_id = s.id
+WHERE s.is_credit = True
+AND m.date_transaction BETWEEN date('now', 'start of month') AND date('now', 'start of month', '+1 month', '-1 day');
+
+lst_inc = 
+SELECT SUM(m.amount) as lst_inc
+FROM m_transactions m
+JOIN sectors s ON m.sector_id = s.id
+WHERE s.is_credit = True
+AND m.date_transaction 
+BETWEEN date('now', 'start of month', '-1 month') AND date('now', 'start of month', '-1 day');
+yr_avg_inc = SELECT SUM(m.amount) as yr_avg_inc
+FROM m_transactions m
+JOIN sectors s ON m.sector_id = s.id
+WHERE s.is_credit = True
+AND m.date_transaction BETWEEN date('now', 'start of month', '-12 months') AND date('now', 'start of month', '-1 day');
+
+vs_last_month = lst_inc - total_income
+vs_12_month_average = yr_avg_inc/12 - total_income
+
+total_expenditure = SELECT SUM(m.amount) as total_expenditure
+FROM m_transactions m
+JOIN sectors s ON m.sector_id = s.id
+WHERE s.is_credit = False
+AND m.date_transaction BETWEEN date('now', 'start of month') AND date('now', 'start of month', '+1 month', '-1 day');
+
+lst_exp = SELECT SUM(m.amount) as lst_exp
+FROM m_transactions m
+JOIN sectors s ON m.sector_id = s.id
+WHERE s.is_credit = False
+AND m.date_transaction BETWEEN date('now', 'start of month', '-1 month') AND date('now', 'start of month', '-1 day');
+yr_avg_exp = SELECT SUM(m.amount) as yr_avg_exp
+FROM m_transactions m
+JOIN sectors s ON m.sector_id = s.id
+WHERE s.is_credit = False
+AND m.date_transaction BETWEEN date('now', 'start of month', '-12 months') AND date('now', 'start of month', '-1 day');
+
+vs_last_month_exp = lst_exp - total_expenditure
+vs_12_month_average_exp = yr_avg_exp/12 - total_expenditure
+net_balance = total_income - total_expenditure
+
+essential vs non-essential = sum of all rows where is_essential = True - sum of all rows where is_essential = False as percentage of total expenditure
+essential: SELECT SUM(m.amount) as essential
+FROM m_transactions m
+JOIN categories s ON m.category_id = s.id
+WHERE s.is_essential = TRUE
+AND m.date_transaction BETWEEN date('now', 'start of month') AND date('now', 'start of month', '+1 month', '-1 day');
+essential_percent = essential / total_expenditure * 100
+
+non_essential = SELECT SUM(m.amount) as non_essential
+FROM m_transactions m
+JOIN categories s ON m.category_id = s.id
+WHERE s.is_essential = FALSE
+AND m.date_transaction BETWEEN date('now', 'start of month') AND date('now', 'start of month', '+1 month', '-1 day');
+non_essential_percent = non_essential / total_expenditure * 100
+
+s
+Breakdown
+total transactions = count of all rows
+largest transaction = row with largest amount not including income or rent assign_category
+sector totals = sum of all rows where sector = x
+sector vs last month = sector totals last month - sector totals this month
+category totals = sum of all rows where category = x
+category vs last month = category totals last month - category totals this month
+subcategory totals = sum of all rows where subcategory = x
+subcategory vs last month = subcategory totals last month - subcategory totals this month
+niche totals = sum of all rows where niche = x
+niche vs last month = niche totals last month - niche totals this month
+
+Goal Progress
+progress on average weekly spend = (sum of transactions / days in current month * 7) - (sum of transactions / days in last month * 7)
+weekly average essential vs non-essential = (sum of transactions where is_essential = True / days in current month * 7) - (sum of transactions where is_essential = False / days in current month * 7)
+average weekly spend per sector = sum of transactions where sector = x / days in month * 7
+average weekly spend per category = sum of transactions where category = x / days in month * 7
+average weekly spend per subcategory = sum of transactions where subcategory = x / days in month * 7
+average weekly spend per niche = sum of transactions where niche = x / days in month * 7
+
+
+
+
+
+
+
+
+
 
 on_startup()
 process_transactions()

@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 from fuzzywuzzy import fuzz
 import re
+import calendar
 print("Hello World")
 global current_user
 global current_user_id
@@ -250,7 +251,7 @@ def new_addition_prompt(options, prompt_text):
     print(f"{len(options)+2}. Skip.")
     choice = int(input("Please select an option: "))
     if choice == len(options) + 1:
-        new_option = input("Enter new option: ")
+        new_option = None
         return new_option, True
     elif choice == len(options) + 2:
         return None, False
@@ -258,6 +259,16 @@ def new_addition_prompt(options, prompt_text):
         chosen_option = options[choice - 1]['name']
         return chosen_option, False
     
+def get_days_in_current_month():
+    # Get the current year and month
+    now = datetime.now()
+    current_year = now.year
+    current_month = now.month
+
+    # Get the number of days in the current month
+    days_in_month = calendar.monthrange(current_year, current_month)[1]
+
+    return days_in_month
 
 generate_transaction_report:
 
@@ -305,15 +316,25 @@ vs_last_month_exp = lst_exp - total_expenditure
 vs_12_month_average_exp = yr_avg_exp/12 - total_expenditure
 net_balance = total_income - total_expenditure
 
-essential vs non-essential = sum of all rows where is_essential = True - sum of all rows where is_essential = False as percentage of total expenditure
-essential: SELECT SUM(m.amount) as essential
+
+essential: 
+SELECT SUM(m.amount) as essential
 FROM m_transactions m
 JOIN categories s ON m.category_id = s.id
 WHERE s.is_essential = TRUE
-AND m.date_transaction BETWEEN date('now', 'start of month') AND date('now', 'start of month', '+1 month', '-1 day');
+AND m.date_transaction 
+BETWEEN date('now', 'start of month') 
+AND date('now', 'start of month', '+1 month', '-1 day');
+
 essential_percent = essential / total_expenditure * 100
 
 non_essential = SELECT SUM(m.amount) as non_essential
+FROM m_transactions m
+JOIN categories s ON m.category_id = s.id
+WHERE s.is_essential = FALSE
+AND m.date_transaction BETWEEN date('now', 'start of month') AND date('now', 'start of month', '+1 month', '-1 day');
+
+lst_non_essential = SELECT SUM(m.amount) as non_essential
 FROM m_transactions m
 JOIN categories s ON m.category_id = s.id
 WHERE s.is_essential = FALSE
@@ -322,24 +343,78 @@ non_essential_percent = non_essential / total_expenditure * 100
 
 s
 Breakdown
-total transactions = count of all rows
-largest transaction = row with largest amount not including income or rent assign_category
-sector totals = sum of all rows where sector = x
-sector vs last month = sector totals last month - sector totals this month
-category totals = sum of all rows where category = x
-category vs last month = category totals last month - category totals this month
-subcategory totals = sum of all rows where subcategory = x
-subcategory vs last month = subcategory totals last month - subcategory totals this month
-niche totals = sum of all rows where niche = x
-niche vs last month = niche totals last month - niche totals this month
+total_transactions = SELECT COUNT(id) as total_transactions
+FROM m_transactions
+WHERE date_transaction BETWEEN date('now', 'start of month') AND date('now', 'start of month', '+1 month', '-1 day');
 
-Goal Progress
-progress on average weekly spend = (sum of transactions / days in current month * 7) - (sum of transactions / days in last month * 7)
-weekly average essential vs non-essential = (sum of transactions where is_essential = True / days in current month * 7) - (sum of transactions where is_essential = False / days in current month * 7)
-average weekly spend per sector = sum of transactions where sector = x / days in month * 7
-average weekly spend per category = sum of transactions where category = x / days in month * 7
-average weekly spend per subcategory = sum of transactions where subcategory = x / days in month * 7
-average weekly spend per niche = sum of transactions where niche = x / days in month * 7
+largest_transaction = SELECT *
+FROM m_transactions m
+JOIN sectors s ON m.sector_id = s.id
+WHERE s.is_credit = False AND m.category != 'rent'
+ORDER BY m.amount DESC
+LIMIT 1;
+
+sector_total = 
+Select sector_id, SUM(amount) as sector_total
+FROM m_transactions
+WHERE date_transaction BETWEEN date('now', 'start of month') AND date('now', 'start of month', '+1 month', '-1 day')
+GROUP BY sector_id;
+lst_sector_total =
+SELECT sector_id, SUM(amount) as lst_sector_total
+FROM m_transactions
+WHERE date_transaction BETWEEN date('now', 'start of month', '-1 month') AND date('now', 'start of month', '-1 day')
+GROUP BY sector_totals_id;
+sector_vs = lst_sector_totals - sector_totals
+
+category_total =
+SELECT category_id, SUM(amount) as category_total
+FROM m_transactions
+WHERE date_transaction BETWEEN date('now', 'start of month') AND date('now', 'start of month', '+1 month', '-1 day')
+GROUP BY category_id;
+lst_category_total =
+SELECT category_id, SUM(amount) as lst_category_total
+FROM m_transactions
+WHERE date_transaction BETWEEN date('now', 'start of month') AND date('now', 'start of month', '+1 month', '-1 day')
+GROUP BY category_totals_id;
+
+category_vs = lst_category_total - category_total
+
+subcat_total =
+SELECT subcategory_id, SUM(amount) as subcat_total
+FROM m_transactions
+WHERE date_transaction BETWEEN date('now', 'start of month') AND date('now', 'start of month', '+1 month', '-1 day')
+GROUP BY subcategory_id;
+lst_subcategory_total =
+SELECT subcategory_id, SUM(amount) as lst_subcategory_total
+FROM m_transactions
+WHERE date_transaction BETWEEN date('now', 'start of month') AND date('now', 'start of month', '+1 month', '-1 day')
+GROUP BY subcategory_totals_id;
+
+subcat_vs = lst_subcategory_total - subcategory_total
+
+niche_total =
+SELECT niche_id, SUM(amount) as niche_total
+FROM m_transactions
+WHERE date_transaction BETWEEN date('now', 'start of month') AND date('now', 'start of month', '+1 month', '-1 day')
+GROUP BY niche_id;
+lst_niche_total =
+SELECT niche_id, SUM(amount) as lst_niche_total
+FROM m_transactions
+WHERE date_transaction BETWEEN date('now', 'start of month') AND date('now', 'start of month', '+1 month', '-1 day')
+GROUP BY niche_id;
+
+niche_vs = lst_niche_totals - niche_totals
+
+
+#Goal Progress
+days = get_days_in_current_month
+total_weekly_progress = ( total_expenditure/ days * 7) - (lst_exp/ days * 7)
+avg_weekly_progress = (non_essential / days * 7) - (lst_non_essential / days * 7)
+avg_wk_sector = (sector_total / days * 7) - (lst_sector_total / days * 7)
+avg_wk_cat = (category_total / days * 7) - (lst_category_total / days * 7)
+avg_wk_subcat = (subcat_total / days * 7) - (lst_subcat_total / days * 7)
+avg_wk_niche = (niche_total / days * 7) - (lst_niche_total / days * 7)
+
 
 
 

@@ -243,21 +243,19 @@ def assign_category(row):
  
     return sector_id, category_id, subcategory_id, niche_id
 
-def new_addition_prompt(options, prompt_text):
+def new_addition_prompt(options, nxt_option, prompt_text,):
     print(prompt_text)
     for i, option in enumerate(options):
-        print(f"{i+1}. {option['rowid']}. {option['name']}")
-    print(f"{len(options)+1}. Add new:")
-    print(f"{len(options)+2}. Skip.")
+        print(f"{i+1}. {options} ")
+    print(f"{len(options)+1}. {nxt_option}")
+
     choice = int(input("Please select an option: "))
     if choice == len(options) + 1:
         new_option = None
-        return new_option, True
-    elif choice == len(options) + 2:
-        return None, False
+        return new_option
     else:
         chosen_option = options[choice - 1]['name']
-        return chosen_option, False
+        return chosen_option
     
 def get_days_in_current_month():
     # Get the current year and month

@@ -236,6 +236,59 @@ def categorise_transactions(new_transactions, unique_pairs):
     #pull in the global variables
     global current_user
     global current_user_id
+    #function to assign a category to a new transaction
+    def assign_category(new_transactions, unique_pairs, index):
+        #pull in the global variables
+        global current_user
+        global current_user_id
+        #connect to the db
+        conn = sqlite3.connect('.db')
+        cur = conn.cursor()
+        #get the list of sectors, categories, subcategories and niches
+        sectors = [{'rowid': row[0], 'name': row[1]} for row in cur.execute('''SELECT rowid, name FROM sectors''').fetchall()]
+        categories = [{'rowid': row[0], 'name': row[1]} for row in cur.execute('''SELECT rowid, name FROM categories''').fetchall()]
+        subcategories = [{'rowid': row[0], 'name': row[1]} for row in cur.execute('''SELECT rowid, name FROM subcategories''').fetchall()]
+        niches = [{'rowid': row[0], 'name': row[1]} for row in cur.execute('''SELECT rowid, name FROM niches''').fetchall()]
+
+        #the user is shown all the sectors and asked to select one
+        sector = new_addition_prompt(sectors, "Add new", "Please select a sector or add a new one:") 
+        #if the user selects one then the ID is assigned to be the thing that is stored in the transaction.
+        if sector:
+            sector_id = cur.execute('''SELECT rowid FROM sectors WHERE name = ?''', (sector,)).fetchone()
+        #if there is no sector the user will trigger the new_sector function
+        else:
+            type = 'sector'
+            sector = new_category(type)
+            sector_id = cur.lastrowid
+        #repeat for category
+        category = new_addition_prompt(categories, "Add new", "Please select a category or add a new one:")
+        if category:
+            category_id = cur.execute('''SELECT rowid FROM categories WHERE name = ?''', (category,)).fetchone()
+        else:
+            type = 'category'
+            category = new_category(type)
+            category_id = cur.lastrowid
+        #repeat for subcategory
+        subcategory = new_addition_prompt(subcategories, "Add new", "Please select a subcategory or add a new one:")
+        if subcategory:
+            subcategory_id = cur.execute('''SELECT rowid FROM subcategories WHERE name = ?''', (subcategory,)).fetchone()
+        else:
+            type = 'subcategory'
+            subcategory = new_category(type)
+            subcategory_id = cur.lastrowid
+        #repeat for niche
+        niche = new_addition_prompt(niches, "Add new", "Please select a niche or add a new one:")
+        if niche:
+            niche_id = cur.execute('''SELECT rowid FROM niches WHERE name = ?''', (niche,)).fetchone()
+        else:
+            type = 'niche'
+            niche = new_category(type)
+            niche_id = cur.lastrowid
+        new_transactions.loc[index, ['category', 'subcategory', 'niche', 'sector']] = [category_id, subcategory_id, niche_id, sector_id]
+        common_columns = new_transactions.columns.intersection(unique_pairs.columns)
+        row_to_move = new_transactions.loc[index, common_columns]
+        unique_pairs = pd.concat([unique_pairs, row_to_move.to_frame().T], ignore_index=True)            
+        return new_transactions, unique_pairs        
     #of each row in the new_transactions dataframe complete the following process:
     for index, row in new_transactions.iterrows():
         #1 create a list to hold potential matches
@@ -264,53 +317,60 @@ def categorise_transactions(new_transactions, unique_pairs):
             print(f"If none of the above are correct please enter {add_new}")
             selection = int(input("Please select the correct match: "))
             #if the user selects the new option, call the assign_category function
-            #function to assign a category to a new transaction
-            def assign_category(new_transactions, unique_pairs, index):
-                #pull in the global variables
-                global current_user
-                global current_user_id
-                #connect to the db
-                conn = sqlite3.connect('.db')
-                cur = conn.cursor()
-                #get the list of sectors, categories, subcategories and niches
-                sectors = [{'rowid': row[0], 'name': row[1]} for row in cur.execute('''SELECT rowid, name FROM sectors''').fetchall()]
-                categories = [{'rowid': row[0], 'name': row[1]} for row in cur.execute('''SELECT rowid, name FROM categories''').fetchall()]
-                subcategories = [{'rowid': row[0], 'name': row[1]} for row in cur.execute('''SELECT rowid, name FROM subcategories''').fetchall()]
-                niches = [{'rowid': row[0], 'name': row[1]} for row in cur.execute('''SELECT rowid, name FROM niches''').fetchall()]
-            
-                
-            
-            
-            
-            
-            
-            
             if selection == add_new:
-                sector_id, category_id, subcategory_id, niche_id = assign_category(new_transactions, unique_pairs, index)
-                new_transactions.loc[index, ['category', 'subcategory', 'niche', 'sector']] = [category_id, subcategory_id, niche_id, sector_id]
-                common_columns = new_transactions.columns.intersection(unique_pairs.columns)
-                row_to_move = new_transactions.loc[index, common_columns]
-                unique_pairs = pd.concat([unique_pairs, row_to_move.to_frame().T], ignore_index=True)            
+                new_transactions, unique_pairs = assign_category(new_transactions, unique_pairs, index)
+                
             else:
                 new_transactions.loc[index, ['category', 'subcategory', 'niche', 'sector']] = potential_matches[selection-1][['category', 'subcategory', 'niche', 'sector']]
                 print("Transactions categorised")
-        #5.3 if there are no matches, alert user and call add_category function
+        #5.3 if there are no matches, alert user and call assign_category function
         else:
             print(f"No matches found for {row['description']} with amount {row['amount']}")
-            sector_id, category_id, subcategory_id, niche_id = assign_category(new_transactions, unique_pairs, index)
-            new_transactions.loc[index, ['category', 'subcategory', 'niche', 'sector']] = [category_id, subcategory_id, niche_id, sector_id]
-            common_columns = new_transactions.columns.intersection(unique_pairs.columns)
-            row_to_move = new_transactions.loc[index, common_columns]
-            unique_pairs = pd.concat([unique_pairs, row_to_move.to_frame().T], ignore_index=True)               
+            new_transactions, unique_pairs = assign_category(new_transactions, unique_pairs, index)
+              
     return new_transactions
 
 #function to create a new category
+def new_category(type):
+    #pull in the global variables 
+    global current_user
+    global current_user_id
+    name = input(f"Please enter a name for the new {type}: ")
+    user_description = input(f"Please enter a description for the new {type}: ")
+    if type == 'sector':
+        cue = 'Credit'
+        column = 'is_credit'
+        is_credit_essential = input(f"Is this {type} {cue}? (yes/no): ").lower() == 'yes'
+    elif type == 'category':
+        cue = 'Essential'
+        column = 'is_essential'
+        is_credit_essential = input(f"Is this {type} {cue}? (yes/no): ").lower() == 'yes'    
+    date_created = datetime.now()
+    created_by = current_user_id
+    conn = sqlite3.connect('users.db')
+    cur = conn.cursor()
+    cur.execute(f'''INSERT INTO {type}s (name, user_description, {column}, date_created, created_by) VALUES (?,?,?,?,?)''', (name, user_description, is_credit_essential, date_created, created_by))
+    return name
+
+#Retreive all the values needed to generate 'standard' report
+
+#generate report
+
+#upload record of values used in report to db
 
 
 
-
-
-
-
-
-
+#take in a list of options, a 'back, new ect' option and a prompt text
+#return either value of the selected option or None
+def new_addition_prompt(options, nxt_option, prompt_text,):
+    print(prompt_text)
+    for i, option in enumerate(options):
+        print(f"{i+1}. {options} ")
+    print(f"{len(options)+1}. {nxt_option}")
+    choice = int(input("Please select an option: "))
+    if choice == len(options) + 1:
+        new_option = None
+        return new_option
+    else:
+        chosen_option = options[choice - 1]['name']
+        return chosen_option

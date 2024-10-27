@@ -1,0 +1,11 @@
+Finish putting all functions in 'main'
+
+Write the function to get all report VALUES
+
+Write the 'edit' function. for new and old transactions.
+
+Write the function that will backdate/update historical reporting based on any edits.
+
+Create a GUI.
+
+Post report results to a Website for viewing.

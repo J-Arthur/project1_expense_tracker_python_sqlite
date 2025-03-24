@@ -374,3 +374,88 @@ def new_addition_prompt(options, nxt_option, prompt_text,):
     else:
         chosen_option = options[choice - 1]['name']
         return chosen_option
+
+
+#Report Structure:
+#Weekly Report
+#pull all records in the weekly date range into a temp table
+#one for outgoing
+CREATE TEMPORARY TABLE wkly_reporting_out_now AS
+SELECT *
+FROM m_transactions
+JOIN sectors s ON m.sector_id = s.id
+WHERE s.is_credit = False;
+AND m.date_transaction BETWEEN DATE('now', 'weekday 0', '-7 days') AND DATE('now', 'weekday 0', '-1 day');
+#one for income
+CREATE TEMPORARY TABLE wkly_reporting_in_now AS
+SELECT *
+FROM m_transactions
+JOIN sectors s ON m.sector_id = s.id
+WHERE s.is_credit = True;
+AND m.date_transaction BETWEEN DATE('now', 'weekday 0', '-7 days') AND DATE('now', 'weekday 0', '-1 day');
+#Query all current info only(stuff that doesnt need old records)
+#total out transactions:
+now_count = SELECT COUNT(*) AS wkly_entries_total 
+FROM wkly_reporting_out_now
+#highest out:
+now_highest = SELECT date_transaction, processed_description, amount, sector_id
+FROM wkly_reporting_out_now 
+ORDER BY amount DESC LIMIT 1;
+#most common;
+SELECT processed_descriptions AS frequency FROM wkly_reporting_out_now ORDER BY frequency DESC LIMIT 1;
+#amount up or down vs last week & last year.
+last_week_count = SELECT entry_total FROM m_wkly_reporting WHERE lastrowiD 
+vs_lastwk = now_count - last_week_count
+last_year_count = SELECT entry_total FROM m_wkly_reporting WHERE this week minus 52
+vs_lastwk = now_count - last_year_count
+
+#total in: amount
+now_in_total = SELECT SUM(amount) as now_in_total
+FROM wkly_reporting_in_now
+# source breakdown, 
+# amount up or down vs last week & last year. 
+last_week_in = SELECT in_total FROM m_wkly_reporting WHERE lastrowID
+in_vs_lstwk = now_in_total -last_week_in
+last_year_in = SELECT in_total FROM m_wkly_reporting WHERE lastrowID - 51
+in_vs_lstyr = now_in_total - last_year_in
+# Year on year change.
+in_yoy = in_vs_lstyr/last_year_in * 100
+# #total out: amount,
+now_out_total = SELECT SUM(amount) as now_in_total
+FROM wkly_reporting_out_now
+#amount up or down vs last week & last year. Year on year change.
+last_week_out = SELECT out_total FROM m_wkly_reporting WHERE lastrowID
+out_vs_lstwk = now_out_total -last_week_out
+last_year_out = SELECT out_total FROM m_wkly_reporting WHERE lastrowID - 51
+out_vs_lstyr = now_out_total - last_year_out
+# Year on year change.
+out_yoy = out_vs_lstyr/last_year_out * 100 
+# source breakdown, 
+# 
+#average essentials expenditure: total, 
+# vs last week, vs last year, year on year change.
+#average non-essential expenditure: total, 
+# vs last week, vs last year, year on year change.
+
+
+#current yearly net position 
+ytd_net =  SELECT COALESCE(SUM(net_position), 0) as ytd_net
+FROM m_wkly_reporting 
+WHERE report_date BETWEEN DATE('now', 'start of year') AND DATE('now')
+# net position projections
+#average net position * remaining weeks of the year. + current yearly savings
+ytd_avg_net = COALESCE(AVG(net_position), 0) as ytd_avg_net
+FROM m_wkly_reporting
+WHERE report_date BETWEEN DATE('now', 'start of year') AND DATE('now')
+current_week = datetime.now().isocalendar()[1]
+total_weeks = 52
+remaining_weeks = total_weeks - current_week
+eoy_net = ytd_avg_net * remaining_weeks if ytd_avg_net is not None else 0 + ytd_net
+
+#current time (weeks) to savings goals
+savings goals - total net position since goal added /% average of weekly net  
+#current # weeks of essentials banked.
+total net position / average weekly essentials 
+
+#Monthly 
+
